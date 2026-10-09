@@ -48,15 +48,17 @@ function checkPriority(value, errors) {
   return value;
 }
 
+/** True for a `YYYY-MM-DD` string that names a real calendar date. */
+export function isCalendarDate(value) {
+  if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 function checkDueDate(value, errors) {
   if (value === null) return null;
-  if (typeof value !== 'string' || !DATE_PATTERN.test(value)) {
-    errors.dueDate = 'dueDate must be null or a date string in YYYY-MM-DD format';
-    return undefined;
-  }
-  const parsed = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
-    errors.dueDate = 'dueDate is not a real calendar date';
+  if (!isCalendarDate(value)) {
+    errors.dueDate = 'dueDate must be null or a real date in YYYY-MM-DD format';
     return undefined;
   }
   return value;
