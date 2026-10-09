@@ -24,7 +24,7 @@ test('parseListQuery returns defaults for an empty query', () => {
   assert.deepEqual(parse(''), {
     filters: {},
     sort: { field: 'createdAt', direction: 'asc' },
-    limit: 20,
+    limit: null,
     offset: 0,
   });
 });
@@ -137,6 +137,18 @@ test('applyListQuery paginates and reports the unpaginated total', () => {
   assert.deepEqual(titles(applyListQuery(tasks, parse('offset=99'))), []);
 });
 
+test('applyListQuery without a limit returns every match, however many there are', () => {
+  const tasks = Array.from({ length: 150 }, (_, i) => task({ title: `t${i}` }));
+  const result = applyListQuery(tasks, parse(''));
+  assert.equal(result.items.length, 150);
+  assert.equal(result.total, 150);
+});
+
+test('applyListQuery honours offset on its own, without a limit', () => {
+  const tasks = ['a', 'b', 'c', 'd'].map((title) => task({ title }));
+  assert.deepEqual(titles(applyListQuery(tasks, parse('offset=1'))), ['b', 'c', 'd']);
+});
+
 let server;
 let base;
 
@@ -160,6 +172,27 @@ test('GET /tasks returns the page metadata alongside the tasks', async () => {
   assert.equal(body.total, 3);
   assert.equal(body.limit, 2);
   assert.equal(body.offset, 0);
+});
+
+test('GET /tasks with no parameters still returns every task (no implicit page size)', async () => {
+  // Regression: an earlier revision defaulted to limit=20, silently truncating
+  // the list for clients written before paging existed.
+  const store = new TaskStore();
+  for (let i = 0; i < 150; i += 1) {
+    store.create({ title: `task ${i}`, status: 'todo', priority: 2, dueDate: null, tags: [] });
+  }
+  const app = createApp(store);
+  await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
+  try {
+    const res = await fetch(`http://127.0.0.1:${app.address().port}/tasks`);
+    const body = await res.json();
+    assert.equal(body.tasks.length, 150);
+    assert.equal(body.total, 150);
+    assert.equal(body.limit, null);
+    assert.equal(body.offset, 0);
+  } finally {
+    await new Promise((resolve) => app.close(resolve));
+  }
 });
 
 test('GET /tasks answers invalid queries with a 400 and field details', async () => {

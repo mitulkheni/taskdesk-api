@@ -50,10 +50,11 @@ with `400` rather than ignored, so typos surface immediately.
 | `dueFrom`  | `dueFrom=2026-10-01`   | Due on or after this date (tasks without a due date are excluded)    |
 | `dueTo`    | `dueTo=2026-10-31`     | Due on or before this date (tasks without a due date are excluded)   |
 | `sort`     | `sort=-dueDate`        | One of `createdAt` (default), `dueDate`, `priority`, `title`; prefix `-` for descending. Tasks without a due date always sort last. Ascending `priority` lists priority 1 first. |
-| `limit`    | `limit=50`             | Page size, 1–100 (default 20)                                        |
+| `limit`    | `limit=50`             | Page size, 1–100. Paging is opt-in: without `limit`, every match is returned. |
 | `offset`   | `offset=20`            | Number of matching tasks to skip (default 0)                         |
 
-The response is `{ "tasks": [...], "total": <matches before paging>, "limit": n, "offset": n }`.
+The response is `{ "tasks": [...], "total": <matches before paging>, "limit": n | null, "offset": n }`,
+where `limit` is `null` when no page size was requested.
 
 ### Example
 

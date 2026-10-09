@@ -7,7 +7,6 @@ import {
   isCalendarDate,
 } from './validate.js';
 
-export const DEFAULT_LIMIT = 20;
 export const MAX_LIMIT = 100;
 export const MAX_SEARCH_LENGTH = 100;
 export const SORT_FIELDS = ['createdAt', 'dueDate', 'priority', 'title'];
@@ -93,7 +92,9 @@ export function parseListQuery(searchParams) {
     errors.sort = `sort must be one of: ${SORT_FIELDS.join(', ')} (prefix with - for descending)`;
   }
 
-  let limit = DEFAULT_LIMIT;
+  // Paging is opt-in: without `limit`, every matching task is returned, exactly
+  // as `GET /tasks` behaved before these parameters existed.
+  let limit = null;
   if (raw.limit !== undefined) {
     const parsed = parseInteger(raw.limit);
     if (parsed !== undefined && parsed >= 1 && parsed <= MAX_LIMIT) limit = parsed;
@@ -142,13 +143,14 @@ function comparator({ field, direction }) {
 }
 
 /**
- * Filters, sorts and paginates a list of tasks. Ties keep insertion order
- * (Array.prototype.sort is stable), so pages are deterministic.
+ * Filters, sorts and paginates a list of tasks. A `limit` of null means "no
+ * cap". Ties keep insertion order (Array.prototype.sort is stable), so pages
+ * are deterministic.
  */
 export function applyListQuery(tasks, { filters, sort, limit, offset }) {
   const matched = tasks.filter((task) => matches(task, filters)).sort(comparator(sort));
   return {
-    items: matched.slice(offset, offset + limit),
+    items: limit === null ? matched.slice(offset) : matched.slice(offset, offset + limit),
     total: matched.length,
   };
 }
