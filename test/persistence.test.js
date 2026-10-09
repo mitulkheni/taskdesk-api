@@ -1,6 +1,7 @@
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import fsp, { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../src/server.js';
@@ -52,13 +53,28 @@ test('tasks survive a restart', async (t) => {
   assert.equal(second.get(drop.id), undefined);
 });
 
-test('a burst of changes is coalesced and leaves no temp files behind', async (t) => {
+test('a burst of changes is coalesced into a couple of writes and leaves no temp files', async (t) => {
   const dir = await tempDir(t);
   const file = join(dir, 'tasks.json');
   const store = await TaskStore.open(file);
+
+  // Every save ends in one rename, so counting renames counts writes. store.js
+  // imports `rename` as a named export of a built-in module, so patching the
+  // module object only takes effect after re-syncing the ESM exports.
+  const rename = mock.method(fsp, 'rename');
+  syncBuiltinESMExports();
+  t.after(() => {
+    rename.mock.restore();
+    syncBuiltinESMExports();
+  });
+
   for (let i = 0; i < 200; i += 1) store.create({ ...input, title: `Task ${i}` });
   await store.flush();
 
+  // The first create starts a write straight away (a snapshot of one task). The
+  // other 199 arrive while it is in flight and share a single follow-up pass.
+  const writes = rename.mock.callCount();
+  assert.ok(writes >= 1 && writes <= 2, `expected 1-2 writes for 200 changes, saw ${writes}`);
   assert.deepEqual(await readdir(dir), ['tasks.json']);
   assert.equal((await TaskStore.open(file)).size, 200);
 });
