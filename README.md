@@ -46,6 +46,13 @@ curl -X POST localhost:3000/tasks \
 
 Validation failures return `400` with a `details` object keyed by field name.
 
+### Request limits
+
+- Bodies larger than 100 KiB are rejected with `413` (configurable via the `maxBodyBytes` option of `createApp`).
+- Requests with a body must use `Content-Type: application/json`, otherwise the API answers `415`.
+- Bodies must be valid UTF-8; malformed JSON, invalid UTF-8, malformed URLs and malformed
+  percent-encoding in a task id are all `400`s.
+
 ## Layout
 
 ```

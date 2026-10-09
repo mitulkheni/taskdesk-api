@@ -52,8 +52,13 @@ test('POST /tasks returns field-level validation errors', async () => {
 });
 
 test('malformed JSON is a 400, not a 500', async () => {
-  const res = await fetch(`${base}/tasks`, { method: 'POST', body: '{nope' });
+  const res = await fetch(`${base}/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{nope',
+  });
   assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /not valid JSON/);
 });
 
 test('unknown routes and methods', async () => {
