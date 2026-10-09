@@ -15,6 +15,24 @@ PORT=8080 npm start  # custom port
 npm test             # runs the test suite with node:test
 ```
 
+### Persistence
+
+By default tasks live in memory and are lost when the process exits. Set `DATA_FILE` to keep them:
+
+```sh
+DATA_FILE=./data/tasks.json npm start
+```
+
+- Changes are saved in the background. Each save writes a temp file, flushes it to disk and renames
+  it over the data file, so a crash mid-write can never leave a half-written file. Bursts of
+  changes are coalesced into few writes.
+- `SIGINT`/`SIGTERM` wait for pending saves before exiting (exit code `1` if the data could not
+  be saved).
+- If the data file exists but is damaged or in an unknown format, the server refuses to start
+  and leaves the file untouched instead of starting empty and overwriting it.
+- The file must be owned by a single server process; running several against the same file is
+  not supported.
+
 ## API
 
 | Method | Path          | Description                  |
@@ -52,7 +70,7 @@ Validation failures return `400` with a `details` object keyed by field name.
 src/
   index.js      process entry point
   server.js     HTTP routing and error mapping
-  store.js      in-memory task storage
+  store.js      task storage (in-memory, optionally persisted to a JSON file)
   validate.js   request validation
 test/           node:test suites
 ```
