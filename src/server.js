@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { applyListQuery, parseListQuery } from './query.js';
 import { ValidationError, validateNewTask, validateTaskPatch } from './validate.js';
 
 export class HttpError extends Error {
@@ -38,7 +39,7 @@ async function readJson(req) {
 export function createApp(store) {
   return http.createServer(async (req, res) => {
     try {
-      const { pathname } = new URL(req.url, 'http://localhost');
+      const { pathname, searchParams } = new URL(req.url, 'http://localhost');
 
       if (pathname === '/health') {
         if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed');
@@ -50,7 +51,11 @@ export function createApp(store) {
       const id = match[1] ? decodeURIComponent(match[1]) : undefined;
 
       if (id === undefined) {
-        if (req.method === 'GET') return send(res, 200, { tasks: store.list() });
+        if (req.method === 'GET') {
+          const query = parseListQuery(searchParams);
+          const { items, total } = applyListQuery(store.list(), query);
+          return send(res, 200, { tasks: items, total, limit: query.limit, offset: query.offset });
+        }
         if (req.method === 'POST') {
           const task = store.create(validateNewTask(await readJson(req)));
           return send(res, 201, task);
