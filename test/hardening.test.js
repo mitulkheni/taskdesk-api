@@ -45,7 +45,29 @@ test('createApp rejects a nonsensical body limit', () => {
   for (const maxBodyBytes of [0, -1, 1.5, '100', NaN]) {
     assert.throws(() => createApp(new TaskStore(), { maxBodyBytes }), TypeError);
   }
-  assert.ok(DEFAULT_MAX_BODY_BYTES > 0);
+});
+
+test('createApp enforces the documented 100 KiB limit when no option is given', async (t) => {
+  assert.equal(DEFAULT_MAX_BODY_BYTES, 100 * 1024);
+
+  const defaultServer = createApp(new TaskStore());
+  await new Promise((resolve) => defaultServer.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => defaultServer.close(resolve)));
+  const url = `http://127.0.0.1:${defaultServer.address().port}/tasks`;
+
+  // Builds a JSON body of exactly `bytes` bytes (the title is empty, so a request that
+  // gets past the size check is rejected by validation with a 400, never created).
+  const bodyOfSize = (bytes) => {
+    const overhead = Buffer.byteLength(JSON.stringify({ title: '', pad: '' }));
+    return JSON.stringify({ title: '', pad: 'a'.repeat(bytes - overhead) });
+  };
+  const send = (body) =>
+    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+
+  const atLimit = bodyOfSize(DEFAULT_MAX_BODY_BYTES);
+  assert.equal(Buffer.byteLength(atLimit), DEFAULT_MAX_BODY_BYTES);
+  assert.equal((await send(atLimit)).status, 400, 'exactly 100 KiB passes the size check');
+  assert.equal((await send(bodyOfSize(DEFAULT_MAX_BODY_BYTES + 1))).status, 413);
 });
 
 test('a body at the limit is accepted', async () => {
@@ -89,11 +111,20 @@ test('the 413 response asks the client to close the connection', async () => {
   assert.equal(res.headers.get('connection'), 'close');
 });
 
-test('non-JSON content types are rejected with 415', async () => {
-  for (const headers of [{ 'Content-Type': 'text/plain' }, {}]) {
-    const res = await post('{"title":"hi"}', headers);
-    assert.equal(res.status, 415);
-  }
+test('a text/plain body is rejected with 415', async () => {
+  const res = await post('{"title":"hi"}', { 'Content-Type': 'text/plain' });
+  assert.equal(res.status, 415);
+  assert.equal(store.size, 0);
+});
+
+test('a body with no Content-Type header at all is rejected with 415', async () => {
+  // fetch() would add "text/plain;charset=UTF-8" to a string body even with
+  // empty headers, so this has to be sent as a raw request.
+  const body = '{"title":"hi"}';
+  const response = await rawRequest(
+    `POST /tasks HTTP/1.1\r\nHost: localhost\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n${body}`,
+  );
+  assert.match(response, /^HTTP\/1\.1 415 /);
   assert.equal(store.size, 0);
 });
 
